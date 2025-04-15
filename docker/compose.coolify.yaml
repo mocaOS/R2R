@@ -55,8 +55,6 @@ services:
       - POSTGRES_PASSWORD=${HATCHET_POSTGRES_PASSWORD:-hatchet_password}
     volumes:
       - hatchet_postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5435:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${HATCHET_POSTGRES_USER:-hatchet_user} -d ${HATCHET_POSTGRES_DBNAME:-hatchet}"]
       interval: 10s
@@ -85,7 +83,6 @@ services:
   hatchet-create-db:
     image: postgres:latest
     command: sh /scripts/create-hatchet-db.sh
-    restart: "no"
     volumes:
       - ./scripts:/scripts
     environment:
@@ -95,7 +92,6 @@ services:
 
   hatchet-migration:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-migrate:v0.53.15
-    restart: "no"
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
       - HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH=${HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH:-134217728}
@@ -107,7 +103,6 @@ services:
   hatchet-setup-config:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.53.15
     command: /hatchet/hatchet-admin quickstart --skip certs --generated-config-dir /hatchet/config --overwrite=false
-    restart: "no"
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
       - SERVER_AUTH_COOKIE_DOMAIN=${SERVER_AUTH_COOKIE_DOMAIN:-http://host.docker.internal:7274}
@@ -177,7 +172,6 @@ services:
   setup-token:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.53.15
     command: sh /scripts/setup-token.sh
-    restart: "no"
     volumes:
       - ./scripts:/scripts
       - hatchet_certs:/hatchet/certs
@@ -214,7 +208,7 @@ services:
       - R2R_PORT=${R2R_PORT:-7272}
       - R2R_HOST=${R2R_HOST:-0.0.0.0}
       - R2R_LOG_LEVEL=${R2R_LOG_LEVEL:-INFO}
-      - R2R_CONFIG_NAME=${R2R_CONFIG_NAME}
+      - R2R_CONFIG_NAME=${R2R_CONFIG_NAME:-full}
       - R2R_CONFIG_PATH=${R2R_CONFIG_PATH}
       - R2R_PROJECT_NAME=${R2R_PROJECT_NAME:-r2r_default}
       - R2R_SECRET_KEY=${R2R_SECRET_KEY}
@@ -310,6 +304,12 @@ services:
         condition: service_healthy
       graph_clustering:
         condition: service_healthy
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: host.docker.internal:24224
+        fluentd-sub-second-precision: "true"
+        tag: backend
 
   r2r-dashboard:
     image: sciphiai/r2r-dashboard:1.0.3
