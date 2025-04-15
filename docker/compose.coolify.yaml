@@ -93,6 +93,7 @@ services:
 
   hatchet-migration:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-migrate:v0.53.15
+    restart: "no"
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
       - HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH=${HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH:-134217728}
@@ -104,6 +105,7 @@ services:
   hatchet-setup-config:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.53.15
     command: /hatchet/hatchet-admin quickstart --skip certs --generated-config-dir /hatchet/config --overwrite=false
+    restart: "no"
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
       - SERVER_AUTH_COOKIE_DOMAIN=${SERVER_AUTH_COOKIE_DOMAIN:-http://host.docker.internal:7274}
@@ -173,6 +175,7 @@ services:
   setup-token:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.53.15
     command: sh /scripts/setup-token.sh
+    restart: "no"
     volumes:
       - ./scripts:/scripts
       - hatchet_certs:/hatchet/certs
