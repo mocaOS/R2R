@@ -83,6 +83,7 @@ services:
   hatchet-create-db:
     image: postgres:latest
     command: sh /scripts/create-hatchet-db.sh
+    restart: "no"
     volumes:
       - ./scripts:/scripts
     environment:
