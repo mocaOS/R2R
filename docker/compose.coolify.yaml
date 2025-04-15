@@ -212,7 +212,7 @@ services:
       - R2R_PORT=${R2R_PORT:-7272}
       - R2R_HOST=${R2R_HOST:-0.0.0.0}
       - R2R_LOG_LEVEL=${R2R_LOG_LEVEL:-INFO}
-      - R2R_CONFIG_NAME=${R2R_CONFIG_NAME:-full}
+      - R2R_CONFIG_NAME=${R2R_CONFIG_NAME}
       - R2R_CONFIG_PATH=${R2R_CONFIG_PATH}
       - R2R_PROJECT_NAME=${R2R_PROJECT_NAME:-r2r_default}
       - R2R_SECRET_KEY=${R2R_SECRET_KEY}
@@ -308,12 +308,6 @@ services:
         condition: service_healthy
       graph_clustering:
         condition: service_healthy
-    logging:
-      driver: fluentd
-      options:
-        fluentd-address: host.docker.internal:24224
-        fluentd-sub-second-precision: "true"
-        tag: backend
 
   r2r-dashboard:
     image: sciphiai/r2r-dashboard:1.0.3
