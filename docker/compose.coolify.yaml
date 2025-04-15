@@ -55,6 +55,8 @@ services:
       - POSTGRES_PASSWORD=${HATCHET_POSTGRES_PASSWORD:-hatchet_password}
     volumes:
       - hatchet_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${HATCHET_POSTGRES_USER:-hatchet_user} -d ${HATCHET_POSTGRES_DBNAME:-hatchet}"]
       interval: 10s
