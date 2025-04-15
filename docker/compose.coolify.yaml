@@ -84,7 +84,7 @@ services:
     image: postgres:latest
     command: sh /scripts/create-hatchet-db.sh
     volumes:
-      - ${PWD}/docker/scripts:/scripts
+      - ./scripts:/scripts
     environment:
       - HATCHET_POSTGRES_USER=${HATCHET_POSTGRES_USER:-hatchet_user}
       - HATCHET_POSTGRES_PASSWORD=${HATCHET_POSTGRES_PASSWORD:-hatchet_password}
@@ -173,7 +173,7 @@ services:
     image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.53.15
     command: sh /scripts/setup-token.sh
     volumes:
-      - ${PWD}/docker/scripts:/scripts
+      - ./scripts:/scripts
       - hatchet_certs:/hatchet/certs
       - hatchet_config:/hatchet/config
       - hatchet_api_key:/hatchet_api_key
@@ -294,7 +294,7 @@ services:
     volumes:
       - ./user_configs:/app/user_configs
       - hatchet_api_key:/hatchet_api_key:ro
-      - ${PWD}/docker/scripts:/scripts
+      - ./scripts:/scripts
     extra_hosts:
       - host.docker.internal:host-gateway
     depends_on:
