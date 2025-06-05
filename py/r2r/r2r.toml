@@ -9,13 +9,13 @@ default_max_collections_per_user = 5_000
 default_max_upload_size = 214748364800
 
 # LLM used for internal operations, like deriving conversation names
-fast_llm = "openai/gpt-4o-mini"
+fast_llm = "openai/gpt-4.1-mini"
 
 # LLM used for user-facing output, like RAG replies
-quality_llm = "openai/gpt-4o"
+quality_llm = "openai/gpt-4.1"
 
 # LLM used for ingesting visual inputs
-vlm = "openai/gpt-4o"
+vlm = "openai/gpt-4.1"
 
 # LLM used for transcription
 audio_lm = "openai/whisper-1"
@@ -46,6 +46,7 @@ default_admin_password = "change_me_immediately"
 [completion]
 provider = "r2r"
 concurrent_request_limit = 64
+request_timeout = 60
 
   [completion.generation_config]
   temperature = 0.1
@@ -56,6 +57,9 @@ concurrent_request_limit = 64
 
 [crypto]
 provider = "bcrypt"
+
+[file]
+provider = "postgres"
 
 [database]
 default_collection_name = "Default"
@@ -83,7 +87,6 @@ base_model = "openai/text-embedding-3-small"
 base_dimension = 512
 # rerank_model = "huggingface/mixedbread-ai/mxbai-rerank-large-v1" # reranking model
 batch_size = 128
-add_title_as_prefix = false
 concurrent_request_limit = 256
 initial_backoff = 1.0
 quantization_settings = { quantization_type = "FP32" }
@@ -94,7 +97,6 @@ provider = "litellm"
 base_model = "openai/text-embedding-3-small"
 base_dimension = 512
 batch_size = 128
-add_title_as_prefix = false
 concurrent_request_limit = 256
 
 [ingestion]
@@ -102,8 +104,11 @@ provider = "r2r"
 chunking_strategy = "recursive"
 chunk_size = 1_024
 chunk_overlap = 512
-excluded_parsers = ["mp4"]
+excluded_parsers = []
 automatic_extraction = true # enable automatic extraction of entities and relations
+vlm_batch_size=20
+max_concurrent_vlm_tasks=20
+vlm_ocr_one_page_per_chunk = true
 
   [ingestion.chunk_enrichment_settings]
     chunk_enrichment_prompt = "chunk_enrichment"
@@ -113,11 +118,6 @@ automatic_extraction = true # enable automatic extraction of entities and relati
   [ingestion.extra_parsers]
     pdf = ["zerox", "ocr"]
 
-[logging]
-provider = "r2r"
-log_table = "logs"
-log_info_table = "log_info"
-
 [ocr]
 provider = "mistral"
 model = "mistral-ocr-latest"
@@ -126,7 +126,7 @@ model = "mistral-ocr-latest"
 provider = "simple"
 
 [email]
-provider = "console_mock" # `smtp` | `sendgrid` supported
+provider = "console_mock" # `smtp`, `sendgrid`, and `mailersend` supported
 
 [scheduler]
 provider = "apscheduler"

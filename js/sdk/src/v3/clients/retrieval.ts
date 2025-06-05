@@ -4,25 +4,10 @@ import {
   GenerationConfig,
   Message,
   SearchSettings,
+  WrappedEmbeddingResponse,
   WrappedSearchResponse,
 } from "../../types";
 import { ensureSnakeCase } from "../../utils";
-
-function parseSseEvent(raw: { event: string; data: string }) {
-  // Some SSE servers send a "done" event at the end:
-  if (raw.event === "done") return null;
-
-  try {
-    const parsedJson = JSON.parse(raw.data);
-    return {
-      event: raw.event,
-      data: parsedJson,
-    };
-  } catch (err) {
-    console.error("Failed to parse SSE line:", raw.data, err);
-    return null;
-  }
-}
 
 export class RetrievalClient {
   constructor(private client: r2rClient) {}
@@ -154,6 +139,7 @@ export class RetrievalClient {
    *    - Research mode: Advanced capabilities for deep analysis, reasoning, and computation
    *
    * @param message Current message to process
+   * @param messages List of messages to process
    * @param ragGenerationConfig Configuration for RAG generation in 'rag' mode
    * @param researchGenerationConfig Configuration for generation in 'research' mode
    * @param searchMode Search mode to use, either "basic", "advanced", or "custom"
@@ -171,7 +157,8 @@ export class RetrievalClient {
    * @returns
    */
   async agent(options: {
-    message: Message;
+    message?: Message;
+    messages?: Message[];
     ragGenerationConfig?: GenerationConfig | Record<string, any>;
     researchGenerationConfig?: GenerationConfig | Record<string, any>;
     searchMode?: "basic" | "advanced" | "custom";
@@ -188,7 +175,12 @@ export class RetrievalClient {
     needsInitialConversationName?: boolean;
   }): Promise<any | ReadableStream<Uint8Array>> {
     const data: Record<string, any> = {
-      message: options.message,
+      ...(options.message && {
+        message: options.message,
+      }),
+      ...(options.messages && {
+        messages: options.messages,
+      }),
       ...(options.searchMode && {
         search_mode: options.searchMode,
       }),
@@ -328,9 +320,11 @@ export class RetrievalClient {
    * @param text Text to generate embeddings for
    * @returns Vector embedding of the input text
    */
-  async embedding(text: string): Promise<number[]> {
+  async embedding(options: {
+    text: string;
+  }): Promise<WrappedEmbeddingResponse> {
     return await this.client.makeRequest("POST", "retrieval/embedding", {
-      data: { text },
+      data: options.text,
     });
   }
 }

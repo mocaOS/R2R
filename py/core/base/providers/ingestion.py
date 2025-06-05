@@ -27,7 +27,7 @@ class IngestionConfig(ProviderConfig):
     _defaults: ClassVar[dict] = {
         "app": AppConfig(),
         "provider": "r2r",
-        "excluded_parsers": ["mp4"],
+        "excluded_parsers": [],
         "chunking_strategy": "recursive",
         "chunk_size": 1024,
         "chunk_overlap": 512,
@@ -35,6 +35,10 @@ class IngestionConfig(ProviderConfig):
         "extra_parsers": {},
         "audio_transcription_model": None,
         "vlm": None,
+        "vlm_batch_size": 5,
+        "vlm_max_tokens_to_sample": 1_024,
+        "max_concurrent_vlm_tasks": 5,
+        "vlm_ocr_one_page_per_chunk": True,
         "skip_document_summary": False,
         "document_summary_system_prompt": "system",
         "document_summary_task_prompt": "summary",
@@ -76,6 +80,24 @@ class IngestionConfig(ProviderConfig):
     )
     vlm: Optional[str] = Field(
         default_factory=lambda: IngestionConfig._defaults["vlm"]
+    )
+    vlm_batch_size: int = Field(
+        default_factory=lambda: IngestionConfig._defaults["vlm_batch_size"]
+    )
+    vlm_max_tokens_to_sample: int = Field(
+        default_factory=lambda: IngestionConfig._defaults[
+            "vlm_max_tokens_to_sample"
+        ]
+    )
+    max_concurrent_vlm_tasks: int = Field(
+        default_factory=lambda: IngestionConfig._defaults[
+            "max_concurrent_vlm_tasks"
+        ]
+    )
+    vlm_ocr_one_page_per_chunk: bool = Field(
+        default_factory=lambda: IngestionConfig._defaults[
+            "vlm_ocr_one_page_per_chunk"
+        ]
     )
     skip_document_summary: bool = Field(
         default_factory=lambda: IngestionConfig._defaults[

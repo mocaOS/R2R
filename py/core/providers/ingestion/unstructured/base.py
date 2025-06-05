@@ -1,4 +1,3 @@
-# TODO - cleanup type issues in this file that relate to `bytes`
 import asyncio
 import base64
 import logging
@@ -237,30 +236,50 @@ class UnstructuredIngestionProvider(IngestionProvider):
 
         logging.info(f"Fallback ingestion with config = {ingestion_config}")
 
+        vlm_ocr_one_page_per_chunk = ingestion_config.get(
+            "vlm_ocr_one_page_per_chunk", True
+        )
+
         iteration = 0
         for content_item in contents:
             text = content_item["content"]
 
-            loop = asyncio.get_event_loop()
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=ingestion_config["new_after_n_chars"],
-                chunk_overlap=ingestion_config["overlap"],
-            )
-            chunks = await loop.run_in_executor(
-                None, splitter.create_documents, [text]
-            )
-
-            for text_chunk in chunks:
+            if vlm_ocr_one_page_per_chunk and parser_name.startswith(
+                ("zerox_", "ocr_")
+            ):
+                # Use one page per chunk for OCR/VLM
                 metadata = {"chunk_id": iteration}
                 if "page_number" in content_item:
                     metadata["page_number"] = content_item["page_number"]
 
                 yield FallbackElement(
-                    text=text_chunk.page_content,
+                    text=text or "No content extracted.",
                     metadata=metadata,
                 )
                 iteration += 1
                 await asyncio.sleep(0)
+            else:
+                # Use regular text splitting
+                loop = asyncio.get_event_loop()
+                splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=ingestion_config["new_after_n_chars"],
+                    chunk_overlap=ingestion_config["overlap"],
+                )
+                chunks = await loop.run_in_executor(
+                    None, splitter.create_documents, [text]
+                )
+
+                for text_chunk in chunks:
+                    metadata = {"chunk_id": iteration}
+                    if "page_number" in content_item:
+                        metadata["page_number"] = content_item["page_number"]
+
+                    yield FallbackElement(
+                        text=text_chunk.page_content,
+                        metadata=metadata,
+                    )
+                    iteration += 1
+                    await asyncio.sleep(0)
 
     async def parse(
         self,
@@ -325,14 +344,14 @@ class UnstructuredIngestionProvider(IngestionProvider):
             logger.info(
                 f"Parsing {document.document_type}: {document.id} with unstructured"
             )
-            if isinstance(file_content, bytes):
-                file_content = BytesIO(file_content)  # type: ignore
+
+            file_io = BytesIO(file_content)
 
             # TODO - Include check on excluded parsers here.
             if self.config.provider == "unstructured_api":
                 logger.info(f"Using API to parse document {document.id}")
                 files = self.shared.Files(
-                    content=file_content.read(),  # type: ignore
+                    content=file_io.read(),
                     file_name=document.metadata.get("title", "unknown_file"),
                 )
 
@@ -340,12 +359,14 @@ class UnstructuredIngestionProvider(IngestionProvider):
                 ingestion_config.pop("extra_parsers", None)
 
                 req = self.operations.PartitionRequest(
-                    self.shared.PartitionParameters(
+                    partition_parameters=self.shared.PartitionParameters(
                         files=files,
                         **ingestion_config,
                     )
                 )
-                elements = self.client.general.partition(req)  # type: ignore
+                elements = await self.client.general.partition_async(  # type: ignore
+                    request=req
+                )
                 elements = list(elements.elements)  # type: ignore
 
             else:
@@ -353,7 +374,7 @@ class UnstructuredIngestionProvider(IngestionProvider):
                     f"Using local unstructured fastapi server to parse document {document.id}"
                 )
                 # Base64 encode the file content
-                encoded_content = base64.b64encode(file_content.read()).decode(  # type: ignore
+                encoded_content = base64.b64encode(file_io.read()).decode(
                     "utf-8"
                 )
 
@@ -412,10 +433,6 @@ class UnstructuredIngestionProvider(IngestionProvider):
                 data=text,
                 metadata=metadata,
             )
-
-        # TODO: explore why this is throwing inadvertedly
-        # if iteration == 0:
-        #     raise ValueError(f"No chunks found for document {document.id}")
 
         logger.debug(
             f"Parsed document with id={document.id}, title={document.metadata.get('title', None)}, "

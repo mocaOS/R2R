@@ -80,10 +80,15 @@ class PostgresCollectionsHandler(Handler):
             PostgresCollectionsHandler.TABLE_NAME
         )
         if "." in qualified_table:
-            schema, table = qualified_table.split(".", 1)
+            # Remove the quotes from schema and table names
+            schema_with_quotes, table_with_quotes = qualified_table.split(
+                ".", 1
+            )
+            schema = schema_with_quotes.replace('"', "")
+            table = table_with_quotes.replace('"', "")
         else:
             schema = "public"
-            table = qualified_table
+            table = qualified_table.replace('"', "")
 
         # 4. Add the unique constraint if it does not already exist.
         alter_table_constraint = f"""
@@ -349,19 +354,23 @@ class PostgresCollectionsHandler(Handler):
         filter_user_ids: Optional[list[UUID]] = None,
         filter_document_ids: Optional[list[UUID]] = None,
         filter_collection_ids: Optional[list[UUID]] = None,
+        owner_only: bool = False,
     ) -> dict[str, list[CollectionResponse] | int]:
         conditions = []
         params: list[Any] = []
         param_index = 1
 
         if filter_user_ids:
-            conditions.append(f"""
-                c.id IN (
-                    SELECT unnest(collection_ids)
-                    FROM {self.project_name}.users
-                    WHERE id = ANY(${param_index})
-                )
-            """)
+            if owner_only:
+                conditions.append(f"c.owner_id = ANY(${param_index})")
+            else:
+                conditions.append(f"""
+                    c.id IN (
+                        SELECT unnest(collection_ids)
+                        FROM {self.project_name}.users
+                        WHERE id = ANY(${param_index})
+                    )
+                """)
             params.append(filter_user_ids)
             param_index += 1
 

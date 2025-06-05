@@ -22,7 +22,6 @@ provider = "ollama"
 base_model = "mxbai-embed-large"
 base_dimension = 1_024
 batch_size = 128
-add_title_as_prefix = true
 concurrent_request_limit = 2
 
 [completion_embedding]
@@ -30,7 +29,6 @@ provider = "ollama"
 base_model = "mxbai-embed-large"
 base_dimension = 1_024
 batch_size = 128
-add_title_as_prefix = true
 concurrent_request_limit = 2
 
 [agent]
@@ -45,7 +43,7 @@ concurrent_request_limit = 1
   top_p = 1
   max_tokens_to_sample = 1_024
   stream = false
-  api_base = "http://localhost:11434/v1"
+  api_base = "http://host.docker.internal:11434"
 
 [ingestion]
 provider = "unstructured_local"

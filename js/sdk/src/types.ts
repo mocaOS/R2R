@@ -209,9 +209,9 @@ export interface GenerationConfig {
 }
 
 export interface HybridSearchSettings {
-  fullTextWeight?: number;
+  fulltextWeight?: number;
   semanticWeight?: number;
-  fullTextLimit?: number;
+  fulltextLimit?: number;
   rrfK?: number;
 }
 
@@ -228,7 +228,7 @@ export interface GraphSearchSettings {
 export interface SearchSettings {
   useHybridSearch?: boolean;
   useSemanticSearch?: boolean;
-  useFullTextSearch?: boolean;
+  useFulltextSearch?: boolean;
   filters?: Record<string, any>;
   limit?: number;
   offset?: number;
@@ -435,6 +435,7 @@ export type WrappedRelationshipsResponse = PaginatedResultsWrapper<
 // Retrieval Responses
 export type WrappedVectorSearchResponse = ResultsWrapper<VectorSearchResult[]>;
 export type WrappedSearchResponse = ResultsWrapper<CombinedSearchResponse>;
+export type WrappedEmbeddingResponse = ResultsWrapper<number[]>;
 
 // System Responses
 export type WrappedSettingsResponse = ResultsWrapper<SettingsResponse>;

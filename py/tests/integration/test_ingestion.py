@@ -148,11 +148,11 @@ def client(config):
 @pytest.mark.parametrize(
     "file_type,file_path",
     [
-        # ("bmp", "core/examples/supported_file_types/bmp.bmp"), ---> why is this failing?
+        ("bmp", "core/examples/supported_file_types/bmp.bmp"),
         ("csv", "core/examples/supported_file_types/csv.csv"),
         ("css", "core/examples/supported_file_types/css.css"),
         ("doc", "core/examples/supported_file_types/doc.doc"),
-        # ("docx", "core/examples/supported_file_types/docx.docx"),
+        ("docx", "core/examples/supported_file_types/docx.docx"),
         ("eml", "core/examples/supported_file_types/eml.eml"),
         ("epub", "core/examples/supported_file_types/epub.epub"),
         ("heic", "core/examples/supported_file_types/heic.heic"),
@@ -166,14 +166,14 @@ def client(config):
         ("odt", "core/examples/supported_file_types/odt.odt"),
         ("org", "core/examples/supported_file_types/org.org"),
         ("p7s", "core/examples/supported_file_types/p7s.p7s"),
-        # ("pdf", "core/examples/supported_file_types/pdf.pdf"),
+        ("pdf", "core/examples/supported_file_types/pdf.pdf"),
         ("png", "core/examples/supported_file_types/png.png"),
-        # ("ppt", "core/examples/supported_file_types/ppt.ppt"),
-        # ("pptx", "core/examples/supported_file_types/pptx.pptx"),
+        ("ppt", "core/examples/supported_file_types/ppt.ppt"),
+        ("pptx", "core/examples/supported_file_types/pptx.pptx"),
         ("py", "core/examples/supported_file_types/py.py"),
         ("rst", "core/examples/supported_file_types/rst.rst"),
         ("rtf", "core/examples/supported_file_types/rtf.rtf"),
-        # ("tiff", "core/examples/supported_file_types/tiff.tiff"),
+        ("tiff", "core/examples/supported_file_types/tiff.tiff"),
         ("txt", "core/examples/supported_file_types/txt.txt"),
         ("ts", "core/examples/supported_file_types/ts.ts"),
         ("tsv", "core/examples/supported_file_types/tsv.tsv"),
@@ -358,7 +358,7 @@ def test_img_ingestion(client: R2RClient):
     result = client.documents.create(
         file_path="core/examples/supported_file_types/png.png",
         metadata={"title": "Test Document", "author": "Test Author"},
-        ingestion_config={"vlm":"openai/gpt-4o"},
+        ingestion_config={"vlm":"openai/gpt-4.1"},
         run_with_orchestration=False
     )
     with contextlib.suppress(R2RException):
