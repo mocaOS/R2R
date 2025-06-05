@@ -336,7 +336,7 @@ services:
         condition: service_healthy
 
   r2r-dashboard:
-    image: sciphiai/r2r-dashboard:1.0.3
+    image: sciphiai/r2r-dashboard:latest
     environment:
       - NEXT_PUBLIC_R2R_DEPLOYMENT_URL=${NEXT_PUBLIC_R2R_DEPLOYMENT_URL:-http://localhost:7272}
       - NEXT_PUBLIC_HATCHET_DASHBOARD_URL=${NEXT_PUBLIC_HATCHET_DASHBOARD_URL:-http://localhost:7274}
