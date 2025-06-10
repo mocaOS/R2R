@@ -1,0 +1,419 @@
+# documentation: https://r2r-docs.sciphi.ai/
+# slogan: R2R (RAG to Riches) - A complete RAG system with built-in ingestion, chunking, vector search, hybrid search, knowledge graphs, multi-modal support, and more.
+# tags: rag,ai,llm,vector-search,knowledge-graph,document-processing,retrieval
+# logo: svgs/r2r.svg
+# port: 7272
+
+volumes:
+  hatchet_certs:
+    name: hatchet_certs
+  hatchet_config:
+    name: hatchet_config
+  hatchet_api_key:
+    name: hatchet_api_key
+  postgres_data:
+    name: postgres_data
+  hatchet_rabbitmq_data:
+    name: hatchet_rabbitmq_data
+  hatchet_rabbitmq_conf:
+    name: hatchet_rabbitmq_conf
+  hatchet_postgres_data:
+    name: hatchet_postgres_data
+  minio_data:
+    name: minio_data
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_MAX_CONNECTIONS=${POSTGRES_MAX_CONNECTIONS:-1024}
+      - PGPORT=${PGPORT:-5432}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: on-failure
+    command: >
+      postgres
+      -c max_connections=${POSTGRES_MAX_CONNECTIONS:-1024}
+      
+  minio:
+    image: minio/minio
+    profiles: [minio]
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: on-failure
+    command: server /data --console-address ":9001"
+
+  hatchet-postgres:
+    image: postgres:latest
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
+      - HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH=${HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH:-134217728}
+      - HATCHET_CLIENT_GRPC_MAX_SEND_MESSAGE_LENGTH=${HATCHET_CLIENT_GRPC_MAX_SEND_MESSAGE_LENGTH:-134217728}
+      - DATABASE_POSTGRES_PORT=${DATABASE_POSTGRES_PORT:-5432}
+      - DATABASE_POSTGRES_HOST=${DATABASE_POSTGRES_HOST:-hatchet-postgres}
+      - DATABASE_POSTGRES_USERNAME=${DATABASE_POSTGRES_USERNAME:-hatchet_user}
+      - DATABASE_POSTGRES_PASSWORD=${DATABASE_POSTGRES_PASSWORD:-hatchet_password}
+      - HATCHET_DATABASE_POSTGRES_DB_NAME=${HATCHET_DATABASE_POSTGRES_DB_NAME:-hatchet}
+      - POSTGRES_DB=${POSTGRES_DB:-hatchet}
+      - POSTGRES_USER=${HATCHET_POSTGRES_USER:-hatchet_user}
+      - POSTGRES_PASSWORD=${HATCHET_POSTGRES_PASSWORD:-hatchet_password}
+    volumes:
+      - hatchet_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HATCHET_POSTGRES_USER:-hatchet_user} -d ${HATCHET_POSTGRES_DBNAME:-hatchet}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  hatchet-rabbitmq:
+    image: "rabbitmq:3-management"
+    hostname: "hatchet-rabbitmq"
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      - SERVER_TASKQUEUE_RABBITMQ_URL=${SERVER_TASKQUEUE_RABBITMQ_URL:-amqp://user:password@hatchet-rabbitmq:5672/}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-user}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:-password}
+    volumes:
+      - hatchet_rabbitmq_data:/var/lib/rabbitmq
+      - hatchet_rabbitmq_conf:/etc/rabbitmq/rabbitmq.conf
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  download-scripts:
+    image: alpine:latest
+    command: sh -c "
+      apk add --no-cache curl &&
+      mkdir -p /scripts &&
+      mkdir -p /user_configs &&
+      mkdir -p /fluent-bit &&
+      curl -o /scripts/create-hatchet-db.sh https://raw.githubusercontent.com/mocaOS/R2R/refs/heads/main/docker/scripts/create-hatchet-db.sh &&
+      curl -o /scripts/setup-token.sh https://raw.githubusercontent.com/mocaOS/R2R/refs/heads/main/docker/scripts/setup-token.sh &&
+      curl -o /scripts/start-r2r.sh https://raw.githubusercontent.com/mocaOS/R2R/refs/heads/main/docker/scripts/start-r2r.sh &&
+      curl -o /user_configs/full_litellm.toml https://raw.githubusercontent.com/mocaOS/R2R/refs/heads/main/docker/user_configs/full_litellm.toml &&
+      curl -o /fluent-bit/fluent-bit.conf https://raw.githubusercontent.com/mocaOS/R2R/refs/heads/main/docker/fluent-bit/fluent-bit.conf &&
+      curl -o /fluent-bit/parsers.conf https://raw.githubusercontent.com/mocaOS/R2R/refs/heads/main/docker/fluent-bit/parsers.conf &&
+      chmod +x /scripts/*.sh &&
+      echo 'Scripts, configs, and fluent-bit files downloaded successfully'"
+    restart: "no"
+    volumes:
+      - ./scripts:/scripts
+      - ./user_configs:/user_configs
+      - ./fluent-bit:/fluent-bit
+
+  hatchet-create-db:
+    image: postgres:latest
+    command: sh /scripts/create-hatchet-db.sh
+    restart: "no"
+    volumes:
+      - ./scripts:/scripts
+    environment:
+      - HATCHET_POSTGRES_USER=${HATCHET_POSTGRES_USER:-hatchet_user}
+      - HATCHET_POSTGRES_PASSWORD=${HATCHET_POSTGRES_PASSWORD:-hatchet_password}
+      - HATCHET_POSTGRES_DBNAME=${HATCHET_POSTGRES_DBNAME:-hatchet}
+    depends_on:
+      download-scripts:
+        condition: service_completed_successfully
+      hatchet-postgres:
+        condition: service_healthy
+
+  hatchet-migration:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-migrate:v0.53.15
+    restart: "no"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
+      - HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH=${HATCHET_CLIENT_GRPC_MAX_RECV_MESSAGE_LENGTH:-134217728}
+      - HATCHET_CLIENT_GRPC_MAX_SEND_MESSAGE_LENGTH=${HATCHET_CLIENT_GRPC_MAX_SEND_MESSAGE_LENGTH:-134217728}
+    depends_on:
+      hatchet-create-db:
+        condition: service_completed_successfully
+      hatchet-postgres:
+        condition: service_healthy
+
+  hatchet-setup-config:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.53.15
+    command: /hatchet/hatchet-admin quickstart --skip certs --generated-config-dir /hatchet/config --overwrite=false
+    restart: "no"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
+      - SERVER_AUTH_COOKIE_DOMAIN=${SERVER_AUTH_COOKIE_DOMAIN:-http://host.docker.internal:7274}
+      - SERVER_URL=${SERVER_URL:-http://host.docker.internal:7274}
+      - SERVER_AUTH_COOKIE_INSECURE=${SERVER_AUTH_COOKIE_INSECURE:-t}
+      - SERVER_GRPC_BIND_ADDRESS=${SERVER_GRPC_BIND_ADDRESS:-0.0.0.0}
+      - SERVER_GRPC_INSECURE=${SERVER_GRPC_INSECURE:-t}
+      - SERVER_GRPC_BROADCAST_ADDRESS=${SERVER_GRPC_BROADCAST_ADDRESS:-hatchet-engine:7077}
+      - SERVER_GRPC_MAX_MSG_SIZE=${SERVER_GRPC_MAX_MSG_SIZE:-134217728}
+      - SERVER_GRPC_PORT=${SERVER_GRPC_PORT:-7077}
+    volumes:
+      - hatchet_certs:/hatchet/certs
+      - hatchet_config:/hatchet/config
+    depends_on:
+      hatchet-migration:
+        condition: service_completed_successfully
+      hatchet-postgres:
+        condition: service_healthy
+      hatchet-rabbitmq:
+        condition: service_healthy
+
+  hatchet-engine:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-engine:v0.53.15
+    command: /hatchet/hatchet-engine --config /hatchet/config
+    restart: on-failure
+    depends_on:
+      hatchet-setup-config:
+        condition: service_completed_successfully
+      hatchet-postgres:
+        condition: service_healthy
+      hatchet-rabbitmq:
+        condition: service_healthy
+    ports:
+      - "7077:7077"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
+      - SERVER_TASKQUEUE_RABBITMQ_URL=${SERVER_TASKQUEUE_RABBITMQ_URL:-amqp://user:password@hatchet-rabbitmq:5672/}
+      - SERVER_AUTH_COOKIE_DOMAIN=${SERVER_AUTH_COOKIE_DOMAIN:-http://host.docker.internal:7274}
+      - SERVER_URL=${SERVER_URL:-http://host.docker.internal:7274}
+      - SERVER_AUTH_COOKIE_INSECURE=${SERVER_AUTH_COOKIE_INSECURE:-t}
+      - SERVER_GRPC_BIND_ADDRESS=${SERVER_GRPC_BIND_ADDRESS:-0.0.0.0}
+      - SERVER_GRPC_INSECURE=${SERVER_GRPC_INSECURE:-t}
+      - SERVER_GRPC_BROADCAST_ADDRESS=${SERVER_GRPC_BROADCAST_ADDRESS:-hatchet-engine:7077}
+      - SERVER_GRPC_MAX_MSG_SIZE=${SERVER_GRPC_MAX_MSG_SIZE:-134217728}
+      - SERVER_GRPC_PORT=${SERVER_GRPC_PORT:-7077}
+    volumes:
+      - hatchet_certs:/hatchet/certs
+      - hatchet_config:/hatchet/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8733/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  hatchet-dashboard:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-dashboard:v0.53.15
+    command: sh ./entrypoint.sh --config /hatchet/config
+    restart: on-failure
+    depends_on:
+      hatchet-setup-config:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
+      - SERVER_AUTH_COOKIE_DOMAIN=${SERVER_AUTH_COOKIE_DOMAIN:-http://host.docker.internal:7274}
+      - SERVER_URL=${SERVER_URL:-http://host.docker.internal:7274}
+      - SERVER_AUTH_COOKIE_INSECURE=${SERVER_AUTH_COOKIE_INSECURE:-t}
+    volumes:
+      - hatchet_certs:/hatchet/certs
+      - hatchet_config:/hatchet/config
+    ports:
+      - "7274:80"
+
+  setup-token:
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-admin:v0.53.15
+    command: sh /scripts/setup-token.sh
+    restart: "no"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgres://hatchet_user:hatchet_password@hatchet-postgres:5432/hatchet?sslmode=disable}
+    volumes:
+      - ./scripts:/scripts
+      - hatchet_certs:/hatchet/certs
+      - hatchet_config:/hatchet/config
+      - hatchet_api_key:/hatchet_api_key
+    depends_on:
+      download-scripts:
+        condition: service_completed_successfully
+      hatchet-setup-config:
+        condition: service_completed_successfully
+      hatchet-engine:
+        condition: service_healthy
+
+  unstructured:
+    image: ragtoriches/unst-prod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7275/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  graph_clustering:
+    image: ragtoriches/cluster-prod
+    ports:
+      - "7276:7276"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7276/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  r2r:
+    image: sciphiai/r2r:latest
+    environment:
+      # Coolify Magic Variables for R2R Main Service
+      - SERVICE_FQDN_R2R_7272=/
+      
+      # R2R Core Environment
+      - R2R_PORT=${R2R_PORT:-7272}
+      - R2R_HOST=${R2R_HOST:-0.0.0.0}
+      - R2R_LOG_LEVEL=${R2R_LOG_LEVEL:-INFO}
+      - R2R_CONFIG_NAME=${R2R_CONFIG_NAME}
+      - R2R_CONFIG_PATH=${R2R_CONFIG_PATH:-user_configs/full_litellm.toml}
+      - R2R_PROJECT_NAME=${R2R_PROJECT_NAME:-r2r_default}
+      - R2R_SECRET_KEY=${R2R_SECRET_KEY}
+
+      # Database Configuration
+      - R2R_POSTGRES_USER=${R2R_POSTGRES_USER:-postgres}
+      - R2R_POSTGRES_PASSWORD=${R2R_POSTGRES_PASSWORD:-postgres}
+      - R2R_POSTGRES_HOST=${R2R_POSTGRES_HOST:-postgres}
+      - R2R_POSTGRES_PORT=${R2R_POSTGRES_PORT:-5432}
+      - R2R_POSTGRES_DBNAME=${R2R_POSTGRES_DBNAME:-postgres}
+      - R2R_POSTGRES_MAX_CONNECTIONS=${R2R_POSTGRES_MAX_CONNECTIONS:-1024}
+      - R2R_POSTGRES_STATEMENT_CACHE_SIZE=${R2R_POSTGRES_STATEMENT_CACHE_SIZE:-100}
+
+      # Hatchet
+      - HATCHET_CLIENT_TLS_STRATEGY=${HATCHET_CLIENT_TLS_STRATEGY:-none}
+      - HATCHET_CLIENT_TOKEN=${HATCHET_CLIENT_TOKEN}
+
+      # Minio
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+
+      # LLM API Keys
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_BASE=${OPENAI_API_BASE}
+      - AZURE_FOUNDRY_API_ENDPOINT=${AZURE_FOUNDRY_API_ENDPOINT}
+      - AZURE_FOUNDRY_API_KEY=${AZURE_FOUNDRY_API_KEY}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AZURE_API_KEY=${AZURE_API_KEY}
+      - AZURE_API_BASE=${AZURE_API_BASE}
+      - AZURE_API_VERSION=${AZURE_API_VERSION}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - VERTEX_PROJECT=${VERTEX_PROJECT}
+      - VERTEX_LOCATION=${VERTEX_LOCATION}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION_NAME=${AWS_REGION_NAME}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - COHERE_API_KEY=${COHERE_API_KEY}
+      - ANYSCALE_API_KEY=${ANYSCALE_API_KEY}
+
+      # Local Model Settings
+      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://host.docker.internal:11434}
+      - LM_STUDIO_API_BASE=${LM_STUDIO_API_BASE:-http://host.docker.internal:1234}
+      - LM_STUDIO_API_KEY=${LM_STUDIO_API_KEY:-1234}
+      - HUGGINGFACE_API_BASE=${HUGGINGFACE_API_BASE:-http://host.docker.internal:8080}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+
+      # External Services
+      - UNSTRUCTURED_API_KEY=${UNSTRUCTURED_API_KEY}
+      - UNSTRUCTURED_API_URL=${UNSTRUCTURED_API_URL:-https://api.unstructured.io/general/v0/general}
+      - UNSTRUCTURED_SERVICE_URL=${UNSTRUCTURED_SERVICE_URL:-http://unstructured:7275}
+      - UNSTRUCTURED_NUM_WORKERS=${UNSTRUCTURED_NUM_WORKERS:-10}
+      - CLUSTERING_SERVICE_URL=${CLUSTERING_SERVICE_URL:-http://graph_clustering:7276}
+
+      # OAuth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
+
+      # Email Services
+      - MAILERSEND_API_KEY=${MAILERSEND_API_KEY}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+
+      # Web Search
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+      - SERPER_API_KEY=${SERPER_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+
+      # Monitoring
+      - R2R_SENTRY_DSN=${R2R_SENTRY_DSN}
+      - R2R_SENTRY_ENVIRONMENT=${R2R_SENTRY_ENVIRONMENT}
+      - R2R_SENTRY_TRACES_SAMPLE_RATE=${R2R_SENTRY_TRACES_SAMPLE_RATE}
+      - R2R_SENTRY_PROFILES_SAMPLE_RATE=${R2R_SENTRY_PROFILES_SAMPLE_RATE}
+    command: sh /scripts/start-r2r.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7272/v3/health"]
+      interval: 6s
+      timeout: 5s
+      retries: 5
+    restart: on-failure
+    volumes:
+      - ./user_configs:/app/user_configs
+      - ./user_tools:/app/user_tools
+      - hatchet_api_key:/hatchet_api_key:ro
+      - ./scripts:/scripts
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    depends_on:
+      download-scripts:
+        condition: service_completed_successfully
+      setup-token:
+        condition: service_completed_successfully
+      unstructured:
+        condition: service_healthy
+      graph_clustering:
+        condition: service_healthy
+
+  r2r-dashboard:
+    image: sciphiai/r2r-dashboard:latest
+    environment:
+      - SERVICE_FQDN_DASHBOARD_3000=/
+
+      - NEXT_PUBLIC_R2R_DEPLOYMENT_URL=$SERVICE_FQDN_R2R_7272
+      - NEXT_PUBLIC_HATCHET_DASHBOARD_URL=${NEXT_PUBLIC_HATCHET_DASHBOARD_URL:-http://localhost:7274}
+      - NEXT_PUBLIC_R2R_DEFAULT_EMAIL=${NEXT_PUBLIC_R2R_DEFAULT_EMAIL:-admin@example.com}
+      - NEXT_PUBLIC_R2R_DEFAULT_PASSWORD=$SERVICE_PASSWORD_R2R
+
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    volumes:
+      - ./fluent-bit:/fluent-bit/etc:ro
+    ports:
+      - "24224:24224"
+    depends_on:
+      - victoria-logs
+
+  grafana:
+    image: grafana/grafana:latest
+    user: "0"
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./.data/grafana:/var/lib/grafana
+
+  victoria-logs:
+    image: victoriametrics/victoria-logs:v1.10.1-victorialogs
+    ports:
+      - "9428:9428"
+    volumes:
+      - ./.data/victoria-logs:/data
+    command: -storageDataPath=/data -retentionPeriod=60d 
