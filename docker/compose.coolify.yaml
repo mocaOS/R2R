@@ -364,8 +364,6 @@ services:
 
   victoria-logs:
     image: victoriametrics/victoria-logs:v1.10.1-victorialogs
-    ports:
-      - "9428:9428"
     volumes:
       - ./.data/victoria-logs:/data
     command: -storageDataPath=/data -retentionPeriod=60d
